@@ -323,6 +323,7 @@ body{
         <input id="search" type="search" placeholder="搜索姓名…" aria-label="按姓名搜索">
       </div>
       <button id="autoBtn" class="auto-btn" aria-pressed="true">⏸ 暂停轮播</button>
+      <button id="scrollBtn" class="auto-btn" aria-pressed="true">⏸ 暂停滚动</button>
     </div>
   </section>
 
@@ -529,10 +530,18 @@ scroll.addEventListener('mouseleave', ()=> paused = false);
 scroll.addEventListener('focusin', ()=> paused = true);
 scroll.addEventListener('focusout', ()=> paused = false);
 
-const SPEED = reducedMotion ? 0 : 0.45; // px / frame
+const SPEED = 0.45; // px / frame（自动滚动速度；不受系统 reduced-motion 影响，由按钮控制）
 let dir = 1; // 1 = 向上滚动(scrollTop 增大)，-1 = 向下滚动(scrollTop 减小)，实现上下往返
+let scrollOn = true; // 用户可显式暂停/继续自动滚动
+const scrollBtn = document.getElementById('scrollBtn');
+function updateScrollBtn(){
+  scrollBtn.textContent = scrollOn ? '⏸ 暂停滚动' : '▶ 继续滚动';
+  scrollBtn.setAttribute('aria-pressed', scrollOn ? 'true' : 'false');
+}
+scrollBtn.addEventListener('click', ()=>{ scrollOn = !scrollOn; updateScrollBtn(); });
+updateScrollBtn();
 function loop(){
-  if(!paused && SPEED>0 && scroll.scrollHeight > scroll.clientHeight + 4){
+  if(!paused && scrollOn && SPEED>0 && scroll.scrollHeight > scroll.clientHeight + 4){
     const maxTop = scroll.scrollHeight - scroll.clientHeight;
     scroll.scrollTop += SPEED * dir;
     if(scroll.scrollTop >= maxTop){          // 触底 → 反向向下
@@ -545,8 +554,7 @@ function loop(){
   }
   requestAnimationFrame(loop);
 }
-if(SPEED>0) requestAnimationFrame(loop);
-else document.getElementById('hint').textContent = '滚动已按系统设置关闭（reduced-motion），可手动滚动查看';
+requestAnimationFrame(loop); // 始终启动自动滚动（鼠标悬停或点按钮可暂停）
 
 /* ===== 主题选择器 ===== */
 const root = document.documentElement;
