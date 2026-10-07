@@ -530,8 +530,9 @@ scroll.addEventListener('mouseleave', ()=> paused = false);
 scroll.addEventListener('focusin', ()=> paused = true);
 scroll.addEventListener('focusout', ()=> paused = false);
 
-const SPEED = 0.45; // px / frame（自动滚动速度；不受系统 reduced-motion 影响，由按钮控制）
-let dir = 1; // 1 = 向上滚动(scrollTop 增大)，-1 = 向下滚动(scrollTop 减小)，实现上下往返
+const SPEED = 0.6; // px / frame（自动滚动速度；不受系统 reduced-motion 影响，由按钮控制）
+let dir = 1; // 1 = 向下滚动(scrollTop 增大)，-1 = 向上滚动(scrollTop 减小)，实现上下往返
+let acc = 0; // 小数累加器：scrollTop 会被浏览器取整，需累积到 ≥1px 才真正移动
 let scrollOn = true; // 用户可显式暂停/继续自动滚动
 const scrollBtn = document.getElementById('scrollBtn');
 function updateScrollBtn(){
@@ -543,13 +544,15 @@ updateScrollBtn();
 function loop(){
   if(!paused && scrollOn && SPEED>0 && scroll.scrollHeight > scroll.clientHeight + 4){
     const maxTop = scroll.scrollHeight - scroll.clientHeight;
-    scroll.scrollTop += SPEED * dir;
-    if(scroll.scrollTop >= maxTop){          // 触底 → 反向向下
-      scroll.scrollTop = maxTop;
-      dir = -1;
-    } else if(scroll.scrollTop <= 0){         // 触顶 → 反向向上
-      scroll.scrollTop = 0;
-      dir = 1;
+    acc += SPEED * dir;                 // 累积小数位移
+    if(Math.abs(acc) >= 1){             // 凑满 1px 才真正移动（避免被 scrollTop 取整吞掉）
+      scroll.scrollTop += Math.trunc(acc);
+      acc -= Math.trunc(acc);
+    }
+    if(scroll.scrollTop >= maxTop){     // 触底 → 反向向上
+      scroll.scrollTop = maxTop; dir = -1; acc = 0;
+    } else if(scroll.scrollTop <= 0){   // 触顶 → 反向向下
+      scroll.scrollTop = 0; dir = 1; acc = 0;
     }
   }
   requestAnimationFrame(loop);
