@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>坐席绩效业绩排行榜</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -348,7 +351,7 @@ body{
     <div class="scroll-hint" id="hint">↓ 榜单自动滚动中（鼠标悬停暂停）</div>
   </section>
 
-  <footer class="foot">服务运营部 · 绩效业绩看板 · 仅供内部参考</footer>
+  <footer class="foot">服务运营部 · 绩效业绩看板 · 仅供内部参考 · <span id="buildTag">构建 20261007-6</span></footer>
 </div>
 
 <button id="themeBall" class="theme-ball" aria-label="展开主题选择器" title="切换 UI 主题">🎨</button>
@@ -443,7 +446,7 @@ function getFiltered(){
   return list;
 }
 
-function render(){
+function render(resetTop){
   const list = getFiltered();
   if(list.length === 0){
     tbody.innerHTML = '<tr><td colspan="8" class="empty">未找到匹配「'+ (query||'') +'」的人员</td></tr>';
@@ -464,7 +467,7 @@ function render(){
       + '</tr>';
   }).join('');
   tbody.innerHTML = rows;
-  scroll.scrollTop = 0;
+  if(resetTop !== false) scroll.scrollTop = 0; // 轮播切换时保留滚动位置，滚动更连贯
 }
 
 /* ===== 切换器 / 搜索 ===== */
@@ -476,7 +479,7 @@ tabsEl.addEventListener('click', e=>{
   setActiveTab();
   autoMode = false;          // 手动选择后停止轮播
   updateAutoBtn();
-  render();
+  render(true);
 });
 
 function setActiveTab(){
@@ -491,7 +494,7 @@ searchEl.addEventListener('input', e=>{
   query = e.target.value.trim();
   autoMode = false;
   updateAutoBtn();
-  render();
+  render(true);
 });
 
 /* ===== 自动轮播（顺序：全部→综合→人社→公教企→工单） ===== */
@@ -521,7 +524,7 @@ setInterval(()=>{
   autoIndex = (autoIndex+1) % TABS.length;
   currentTab = TABS[autoIndex];
   setActiveTab();
-  render();
+  render(false);   // 轮播切换不重置滚动位置
 }, 9000);
 
 /* ===== 缓慢滚动 ===== */
@@ -530,10 +533,14 @@ scroll.addEventListener('mouseleave', ()=> paused = false);
 scroll.addEventListener('focusin', ()=> paused = true);
 scroll.addEventListener('focusout', ()=> paused = false);
 
-const SPEED = 0.6; // px / frame（自动滚动速度；不受系统 reduced-motion 影响，由按钮控制）
-let dir = 1; // 1 = 向下滚动(scrollTop 增大)，-1 = 向上滚动(scrollTop 减小)，实现上下往返
-let acc = 0; // 小数累加器：scrollTop 会被浏览器取整，需累积到 ≥1px 才真正移动
-let scrollOn = true; // 用户可显式暂停/继续自动滚动
+/* 用 setInterval 驱动（而非 requestAnimationFrame）：
+   rAF 在 iframe/后台/某些预览环境里会被浏览器节流到近乎不触发，导致“不滚动”。
+   setInterval 在可见页面中稳定运行，配合整数累加器即可平滑缓慢滚动。 */
+const TICK = 33;          // 每 ~33ms 一步（≈30 步/秒）
+const SPEED = 1.0;        // px / step ≈ 30px/s，缓慢
+let dir = 1;              // 1 = 向下滚动(scrollTop 增大)，-1 = 向上滚动(scrollTop 减小)，上下往返
+let acc = 0;              // 整数累加器：scrollTop 会被浏览器取整，需累积到 ≥1px 才真正移动
+let scrollOn = true;      // 用户可显式暂停/继续自动滚动
 const scrollBtn = document.getElementById('scrollBtn');
 function updateScrollBtn(){
   scrollBtn.textContent = scrollOn ? '⏸ 暂停滚动' : '▶ 继续滚动';
@@ -541,23 +548,22 @@ function updateScrollBtn(){
 }
 scrollBtn.addEventListener('click', ()=>{ scrollOn = !scrollOn; updateScrollBtn(); });
 updateScrollBtn();
-function loop(){
-  if(!paused && scrollOn && SPEED>0 && scroll.scrollHeight > scroll.clientHeight + 4){
-    const maxTop = scroll.scrollHeight - scroll.clientHeight;
-    acc += SPEED * dir;                 // 累积小数位移
-    if(Math.abs(acc) >= 1){             // 凑满 1px 才真正移动（避免被 scrollTop 取整吞掉）
-      scroll.scrollTop += Math.trunc(acc);
-      acc -= Math.trunc(acc);
-    }
-    if(scroll.scrollTop >= maxTop){     // 触底 → 反向向上
-      scroll.scrollTop = maxTop; dir = -1; acc = 0;
-    } else if(scroll.scrollTop <= 0){   // 触顶 → 反向向下
-      scroll.scrollTop = 0; dir = 1; acc = 0;
-    }
+function tick(){
+  if(paused || !scrollOn) return;
+  if(scroll.scrollHeight <= scroll.clientHeight + 4) return; // 内容未溢出，无需滚动
+  const maxTop = scroll.scrollHeight - scroll.clientHeight;
+  acc += SPEED * dir;                 // 累积小数位移
+  if(Math.abs(acc) >= 1){             // 凑满 1px 才真正移动（避免被 scrollTop 取整吞掉）
+    scroll.scrollTop += Math.trunc(acc);
+    acc -= Math.trunc(acc);
   }
-  requestAnimationFrame(loop);
+  if(scroll.scrollTop >= maxTop){     // 触底 → 反向向上
+    scroll.scrollTop = maxTop; dir = -1; acc = 0;
+  } else if(scroll.scrollTop <= 0){   // 触顶 → 反向向下
+    scroll.scrollTop = 0; dir = 1; acc = 0;
+  }
 }
-requestAnimationFrame(loop); // 始终启动自动滚动（鼠标悬停或点按钮可暂停）
+setInterval(tick, TICK); // 常驻自动滚动（鼠标悬停或点按钮可暂停）
 
 /* ===== 主题选择器 ===== */
 const root = document.documentElement;
@@ -608,7 +614,7 @@ let saved = null;
 try{ saved = localStorage.getItem('lb-theme'); }catch(e){}
 applyTheme(saved && THEMES.some(t=>t.id===saved) ? saved : 'gov-blue');
 updateAutoBtn();
-render();
+render(true);
 </script>
 </body>
 </html>
